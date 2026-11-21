@@ -41,17 +41,32 @@ Wrap any async function with `createRaceGuard`:
 ```typescript
 import { createRaceGuard } from 'fetch-race-guard';
 
-const safeSearch = createRaceGuard(async (query: string, { signal }) => {
-  // Pass the signal to fetch, axios, or any AbortSignal-compatible client
-  const res = await fetch(`/api/search?q=${query}`, { signal });
-  return res.json();
-});
+const safeSearch = createRaceGuard(
+  async (query: string, { signal }) => {
+    // Pass the signal to fetch, axios, or any AbortSignal-compatible client
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal });
+    return res.json();
+  },
+  // Superseded calls resolve to undefined instead of rejecting
+  { onStale: 'silent' }
+);
 
 // Rapidly call it:
 safeSearch('c');
 safeSearch('cat');
 const finalResults = await safeSearch('caterpillar');
 // Guaranteed: only 'caterpillar' updates your UI!
+```
+
+With the default `onStale: 'reject'`, every superseded call rejects with a `StaleOperationError`. Catch it with `isAbortOrStaleError`, or calls you don't await end up as unhandled rejections:
+
+```typescript
+import { createRaceGuard, isAbortOrStaleError } from 'fetch-race-guard';
+
+const strictSearch = createRaceGuard(searchFn); // onStale defaults to 'reject'
+strictSearch('cat').catch((err) => {
+  if (!isAbortOrStaleError(err)) throw err;
+});
 ```
 
 ---
@@ -73,7 +88,7 @@ export function SearchComponent() {
     () =>
       createRaceGuard(
         async (query: string, { signal }) => {
-          const res = await fetch(`/api/users?search=${query}`, { signal });
+          const res = await fetch(`/api/users?search=${encodeURIComponent(query)}`, { signal });
           return res.json();
         },
         {
@@ -127,7 +142,7 @@ export class UserSearchComponent {
 
   private searchGuard = createRaceGuard(
     async (term: string, { signal }) => {
-      const res = await fetch(`/api/search?q=${term}`, { signal });
+      const res = await fetch(`/api/search?q=${encodeURIComponent(term)}`, { signal });
       return res.json();
     },
     {
@@ -161,7 +176,7 @@ export class UserSearchComponent {
 | `abortStale` | `boolean` | `true` | Aborts the previous `AbortController` on new call. |
 | `onStale` | `'reject' \| 'silent'` | `'reject'` | If `'silent'`, superseded calls resolve `undefined` without throwing. |
 | `onSuccess` | `(data, ctx) => void` | `undefined` | Callback invoked **only** for the latest settled call. |
-| `onError` | `(err, ctx) => void` | `undefined` | Callback invoked for true non-stale errors. |
+| `onError` | `(err, ctx) => void` | `undefined` | Callback invoked when the latest call fails. Errors of superseded calls and errors thrown by `onSuccess` do not reach it. |
 
 #### Cancellation
 

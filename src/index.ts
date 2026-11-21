@@ -130,47 +130,43 @@ export class RaceGuard<TArgs extends any[] = any[], TResult = any> {
       isStale: () => !this.isLatest(invocationId),
     };
 
+    let result: TResult;
     try {
       // Execute the user's async function
-      const result = await this.fn(...args, context);
-
-      // Verify this is still the latest invocation
-      if (!this.isLatest(invocationId)) {
-        if (this.options.onStale === 'silent') {
-          return undefined;
-        }
-        throw new StaleOperationError(`Call #${invocationId} superseded by call #${this.currentId}`);
-      }
-
-      // Fire success callback for the latest call
-      if (this.options.onSuccess) {
-        this.options.onSuccess(result, { id: invocationId });
-      }
-
-      return result;
+      result = await this.fn(...args, context);
     } catch (error) {
-      // If this call is stale, handle according to options
-      if (!this.isLatest(invocationId) || isAbortOrStaleError(error)) {
-        if (this.options.onStale === 'silent') {
-          return undefined;
-        }
-        if (error instanceof StaleOperationError) {
-          throw error;
-        }
-        throw new StaleOperationError(`Call #${invocationId} aborted or superseded`);
+      // Only a call that a newer call (or cancelCurrent) superseded counts as stale.
+      // An AbortError from the caller's own signal on the latest call is a real failure.
+      if (!this.isLatest(invocationId)) {
+        return this.handleStale(invocationId, error);
       }
-
-      // Notify error callback for non-stale errors
-      if (this.options.onError) {
-        this.options.onError(error, { id: invocationId });
-      }
-
+      this.options.onError?.(error, { id: invocationId });
       throw error;
     } finally {
       if (this.activeController === controller) {
         this.activeController = null;
       }
     }
+
+    // Verify this is still the latest invocation
+    if (!this.isLatest(invocationId)) {
+      return this.handleStale(invocationId);
+    }
+
+    // Outside the try: an error thrown by onSuccess (e.g. a failed state update)
+    // reaches the caller as it is, and is not reported as a failed request.
+    this.options.onSuccess?.(result, { id: invocationId });
+    return result;
+  }
+
+  private handleStale(invocationId: number, error?: unknown): undefined {
+    if (this.options.onStale === 'silent') {
+      return undefined;
+    }
+    if (error instanceof StaleOperationError) {
+      throw error;
+    }
+    throw new StaleOperationError(`Call #${invocationId} superseded by call #${this.currentId}`);
   }
 }
 

@@ -87,3 +87,49 @@ test('createRaceGuard - manual cancellation aborts in-flight operation', async (
   await assert.rejects(promise, (err) => isAbortOrStaleError(err));
   assert.equal(wasAborted, true);
 });
+
+test('createRaceGuard - an AbortError on the latest call is reported as an error, not as stale', async () => {
+  const errors = [];
+  const safeFn = createRaceGuard(
+    async () => {
+      const own = new AbortController();
+      own.abort();
+      own.signal.throwIfAborted();
+    },
+    { onStale: 'silent', onError: (err) => errors.push(err.name) }
+  );
+
+  await assert.rejects(safeFn(), (err) => err.name === 'AbortError');
+  assert.deepEqual(errors, ['AbortError']);
+});
+
+test('createRaceGuard - an error thrown by onSuccess reaches the caller without calling onError', async () => {
+  const errors = [];
+  const safeFn = createRaceGuard(async () => 'ok', {
+    onSuccess: () => {
+      throw new Error('setState failed');
+    },
+    onError: (err) => errors.push(err.message),
+  });
+
+  await assert.rejects(safeFn(), /setState failed/);
+  assert.deepEqual(errors, []);
+});
+
+test('createRaceGuard - a stale call that fails rejects as stale and does not call onError', async () => {
+  const errors = [];
+  const safeFn = createRaceGuard(
+    async (id, { signal }) => {
+      await sleep(id === 1 ? 40 : 5);
+      if (id === 1) throw new Error('network down');
+      return id;
+    },
+    { onError: (err) => errors.push(err.message) }
+  );
+
+  const p1 = safeFn(1);
+  const p2 = safeFn(2);
+  await assert.rejects(p1, (err) => err instanceof StaleOperationError);
+  assert.equal(await p2, 2);
+  assert.deepEqual(errors, []);
+});
