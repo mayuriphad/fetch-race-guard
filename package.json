@@ -1,0 +1,49 @@
+{
+  "name": "fetch-race-guard",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Zero-overhead race condition guard for async operations, search inputs, and API fetches. Automatically aborts stale requests and guarantees only the latest result updates your UI.",
+  "author": "Mayuri Phad <mayuriphad656@gmail.com>",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "race-condition",
+    "fetch",
+    "abortcontroller",
+    "search",
+    "async",
+    "react",
+    "angular",
+    "vue",
+    "promise",
+    "cancel",
+    "stale-while-revalidate",
+    "debounce"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mayuriphad/fetch-race-guard.git"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
